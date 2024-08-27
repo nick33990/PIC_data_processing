@@ -17,4 +17,7 @@ And plotting isolated pulses
 #### xt_maps.py
 Functions to plot arrays like $E(x,t)$ or $E(x,\omega)$ etc
 #### xy_maps.py
+Functions to plot 2D arrays on regular grid. And to plot 2 2D arrays on same using transparency (see example)
+![image](https://drive.google.com/uc?export=view&id=1jGQSzfikikUfA2ompz39AFk9VsPut7Vz)
+*Example of attosecond pulse generation in ROM-regime*
 #### constants.py
