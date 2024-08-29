@@ -4,20 +4,16 @@ Library contains some functions, that might be useful to process and visualize o
 ## Brief modules description
 #### file_utils.py
 Contains functions that read data from output files of PIConGPU framework. From h5 file in openPMD format, and from slice printer plugin
+#### time_series.py
+Contains functions to plot spectra, high-frequency parts of signals and plotting isolated pulses 
+#### xt_maps.py
+Functions to plot arrays like $E(x,t)$ or $E(x,\omega)$ etc and perform some transforms.
+#### xy_maps.py
+Functions to plot 2D arrays on regular grid. And to plot two 2D arrays on same using transparency (see example)
+
+#### constants.py
+Definition of useful constants.
 #### math_utils.py
 Contains function to process data: performing fft, fft-filtering of signals, retrieving its envelope and tranforming 2D array from cartesian units to polar
 #### plot_utils.py
 Contains some auxilary functions to plot data
-#### time_series.py
-Contains functions to plot spectra
-
-High-frequency parts of signals
-
-And plotting isolated pulses 
-#### xt_maps.py
-Functions to plot arrays like $E(x,t)$ or $E(x,\omega)$ etc
-#### xy_maps.py
-Functions to plot 2D arrays on regular grid. And to plot 2 2D arrays on same using transparency (see example)
-![image](https://drive.google.com/uc?export=view&id=1jGQSzfikikUfA2ompz39AFk9VsPut7Vz)
-*Example of attosecond pulse generation in ROM-regime*
-#### constants.py
