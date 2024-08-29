@@ -24,4 +24,5 @@ Contains function to process data: performing fft, fft-filtering of signals, ret
 Contains some auxilary functions to plot data
 ### Scripts description
 * **plot_overlap_maps**: takes list of directories, which contains output of PIConGPU calculations in form of h5 data and plots high-frequency part of $B_z$ field projection and electronic density for each .h5-file in each directory. usage: ```python plot_overlap_maps.py```
+* **plot_fields**: Plots specified in code fields and electronic density on different plots. usage: ```python plot_fields.py -t "time steps to plot" -d "directory to save results in"```, e.g. ```python plot_fields.py -t 40000..60000..5000 -d results```-plots time steps from 40000 to 60000 with 5000 step.
 
