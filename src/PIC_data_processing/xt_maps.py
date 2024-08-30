@@ -180,30 +180,3 @@ def kw2angle_w(ky, w, A_kw, show_progress = False):
 
 
 
-
-# def plot_spectra(f)
-# def compensate_diffraction(A_xt):
-# 	"""
-# 	compensates 
-# 	A_xt - map to compensate
-# 	"""
-#	 Nt = len(A_xt)
-#	 Nx = len(A_xt[0])
-#	 A_w = np.zeros(Nt // 2)
-#	 ph_xw = np.zeros_like(A_xt)
-#	 for i in range(A_xt.shape[1]):
-#		 tmp = F(A_xt[:, i])
-#		 A_w += np.abs(tmp[Nt // 2:])
-#		 ph_xw[:, i] = np.angle(tmp)
-# #		 ph_xw[:, i] = np.imag(np.arccosh(tmp))
-#	 w0_idx = np.argmax(A_w) 
-#	 delay = ph_xw[Nt // 2 + w0_idx]
-#	 delay = np.unwrap(delay)
-	
-#	 delay -= delay[Nx // 2]
-#	 delay = delay / (np.argmax(A_w) * 2 * np.pi / Nt)
-	
-#	 A_xt_delayed = np.zeros_like(A_xt)
-#	 for i in range(A_xt.shape[1]):
-#		 A_xt_delayed[:, i] = np.roll(A_xt[:, i], int(delay[i]))
-#	 return A_xt_delayed
