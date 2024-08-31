@@ -5,7 +5,7 @@ Library contains some functions, that might be useful to process and visualize o
 For more examples see examples.ipynb notebook or scripts folder.
 
 ### Installation
-
+```pip install -i https://test.pypi.org/simple/ PIC-data-processing```
 ### Brief modules description
 * **file_utils.py**:
 Contains functions that read data from output files of PIConGPU framework. From h5 file in openPMD format, and from slice printer plugin
