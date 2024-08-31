@@ -38,13 +38,11 @@ def plot_spectra(fig, axs, signal_list, dt,\
 	for i, ft in enumerate(signal_list):
 		Nt = len(ft)
 		w = np.linspace(0, 0.5, Nt // 2 + Nt % 2) * 2 * np.pi / dt[i] / unit_x[1]
+		dw = w[1] - w[0]
 		if compute_fft:
-			dw = w[1] - w[0]
-
 			fw = F(ft * W)[Nt // 2:]
 		else:
 			fw = ft[Nt // 2:]
-			dw = dt[i]
 		fw_amp, fw_ph = np.abs(fw), np.angle(fw)
 
 		if unit_y[1] == 'max':
