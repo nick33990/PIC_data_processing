@@ -9,7 +9,7 @@ For examples see scripts folder.
 ```python3 -m pip install git+https://github.com/nick33990/PIC_data_processing.git```
 ### Brief modules description
 * **file_utils.py**:
-Contains functions that read data from output files of PIConGPU framework. From h5 file in openPMD format, and from slice printer plugin
+Contains functions that read data from output files of PIConGPU framework. From h5 file in openPMD format, and from slice printer plugin.
 * **time_series.py**:
 Contains functions to plot spectra, high-frequency parts of signals and plotting isolated pulses 
 * **xt_maps.py**:
