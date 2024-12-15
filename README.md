@@ -35,6 +35,10 @@ Contains function to process data: performing fft, fft-filtering of signals, ret
 * **plot_utils.py**:
 Contains some auxilary functions to plot data
 ### Scripts description
-* **plot_overlap_maps**: takes list of directories, which contains output of PIConGPU calculations in form of h5 data and plots high-frequency part of $B_z$ field projection and electronic density for each .h5-file in each directory. usage: ```python plot_overlap_maps.py```
-* **plot_fields**: Plots specified in code fields and electronic density on different plots. usage: ```python plot_fields.py -t "time steps to plot" -d "directory to save results in"```, e.g. ```python plot_fields.py -t 40000..60000..5000 -d results```-plots time steps from 40000 to 60000 with 5000 step.
+* **plot_overlap_maps**: takes directorie, that contains output of PIConGPU calculations in form of .h5 data and plots high-frequency part of $B_z$ field projection and electronic density for each .h5-file in each directory. usage: ```python plot_overlapped.py -p path/to/data -t 30000..60000..3000 --fields Ey_Bz```
+<p align="center">
+<img src="https://github.com/user-attachments/assets/2be0b89c-505a-4253-805d-d6e84fa2f02d" width="400" />
+<em align="center"> ROM-harmonic generation, plotted by this scripy (red-$B_z$ field projection, dark blue-electronic density </em>  
+</p>
 
+* **process_temporal**: processes spatiotemporal dynamics. e.g.```python process_temporal``` -p path/to/data --to_plot xw_hf``` will plot spectrum for all positions of field observere and high-frequency part of signal.
