@@ -1,182 +1,257 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from collections.abc import Iterable
 from scipy.interpolate import RegularGridInterpolator, CubicSpline
 from collections.abc import Iterable
-from tqdm.notebook import tqdm
+from tqdm import tqdm
+import h5py
+import os
 
-from .plot_utils import _get_ticks, _round
 from .math_utils import F, Fi
 from .constants import *
+from .base_map import base_map, inplacify
+from .file_utils import load_line, find_params
+
+import matplotlib
+matplotlib.use(mpl_backend)
+import matplotlib.pyplot as plt
+from collections.abc import Iterable
+
+__all__ = ['xt_map', 'SG_hf_filter1D']
 
 
-def compensate_curvature(A_xt):
+
+def SG_hf_filter1D(dt, size, cent, width, order, cut_hf = True):
+	dw = (1) / (size * dt)
+	wp = np.arange(0, size // 2) * dw 
+	F = np.exp(-(0.5 * (wp - cent) / (width)) ** order)
+	if cut_hf:
+		F[int(cent/dw):] = 1
+	F = np.hstack((F[::-1], F))
+	if size % 2 != 0:
+		F = np.pad(F, ((1, 0)), constant_values = F[-1])
+
+	return F
+
+class xt_map(base_map):
 	"""
-	compensates wavefront curvature by time shift of each line
-
-	Parameters
-	----------
-	A_xt - map, to compensate curvature
-
-	Returns:
-	----------
-	A_xt_delayed - same map with compensated curvature
+	class to process and analyze spatiotemporal dynamics 
 	"""
-	Nt = len(A_xt)
-	Nx = len(A_xt[0])
-	ph_xw = F(A_xt, axis = 0)
-	A_w = np.sum(np.abs(ph_xw[Nt // 2:]), axis = 1)
-	ph_xw = np.angle(ph_xw)
-	w0_idx = np.argmax(A_w) 
-	delay = ph_xw[Nt // 2 + w0_idx]
-	delay = np.unwrap(delay)
-	
-	delay -= delay[Nx // 2]
-	delay = delay / (np.argmax(A_w) * 2 * np.pi / Nt)
-	
-	A_xt_delayed = np.zeros_like(A_xt)
-	for i in range(A_xt.shape[1]):
-		A_xt_delayed[:, i] = np.roll(A_xt[:, i], int(delay[i]))
-	return A_xt_delayed
+	def __init__(self, A, dx = 1, dt = 1, x_title = 'x, cells', t_title = 't, steps', x_origin = 0, t_origin = 0):
+		super().__init__(A = A, dx = dt, dy = dx, x_title = t_title, y_title = x_title, x_origin = t_origin, y_origin = x_origin)
+
+	@staticmethod
+	def from_slices(directory, axis, dx = 1, dt = 1, skip = 2, dtype = 'float32', fn2timestep = lambda s : int(s[6:-4])):
+		"""
+		reads spatiotemporal dynamics from
+		"""
+		files = sorted(os.listdir(path), key = fn2timestep)
+		files = files[::skip]
+		lines0 = load_line(join(path, files[0]), [axis], dtype = dtype)
+		Ny, Nt = len(lines0[0]), len(files)
+		F = np.zeros((Nt, Ny), dtype = dtype) 
+		F[0, :] = lines0
+		for j, file in tqdm(enumerate(files[1:])):
+			lines0 = load_line(join(path, file), axes = [axis], dtype = dtype)
+			F[j, :] = lines0
+		return xt_map(
+			A = F.T,
+			dx = dx * 1e6, dt = dt * skip * 1e15,
+			x_origin = F.T.shape[0] // 2, t_origin = 0,
+			x_title = '$x, \mu m$', y_title = '$t, fs$' 
+		)
 
 
-def plot_xt(fig, axs, A_xt, x, t,\
-			xlim = [None, None], tlim = [None, None],\
-			num_xticks = 5, num_tticks = 5, round_x = 3, round_t = 3, axis_sum = None, sum_height = 0.2,\
-			log_scale = False, sqr_sum = False,\
-			imshow_kwargs = {}, sum_kwargs = {'c':'w'}):
-	"""
-	plots xt map with sum of it along one axis
+	@staticmethod
+	def from_slices_h5(path, field, verbose = True):
+		with h5py.File(path, 'r') as f:
+			F = np.array(f['data'][field[0], field[1]])
+			m = h5py.AttributeManager(f['data'])
+			return xt_map(F, dx = m['dx_SI'] * 1e6, dt = m['dt_SI'] * 1e15,\
+			 x_title = '$x, \mu m$', t_title = '$t, fs$')
 
-	Parameters
-	----------
-	fig - matplotlib figure
-	axs - matplotlib axes. if axs is list of two axes objects, than first is used to plot map
-		and second - for colorbar
-	A_xt - map to plot
-	x - list of coordinates along spacial axis ( in plot will be vertical)
-	t - list of coordinates along temporal axis ( in plot will be horizontal)
-	xlim - borders for spacial axis
-	tlim - borders for temporal axis
-	num_xticks - number of ticks to plot scacial axis
-	num_tticks - number of ticks to plot temporal axis
-	round_ - number of significant digits for plot
-	axis_sum - axis, along which map needs to be summed
-	sum_height - part of figure to draw sum
-	log_scale - plot xt map and sum in log scale 
-	sqr_sum - sum squared array or raw values
-	imshow_kwargs - additional arguments for plotting xt map
-	sum_kwargs - additional arguments for plottinf sum
-	"""
-	assert A_xt.shape[0] == len(t), 'A_xt.shape[0] ({}) != t.shape ({})'.format(A_xt.shape[0], len(t))
-	assert A_xt.shape[1] == len(x), 'A_xt.shape[1] ({}) != x.shape ({})'.format(A_xt.shape[1], len(x))
 
-    
-	if not isinstance(axs, Iterable):
-		axs = [axs]
-
-	xticks = _get_ticks(x, xlim, num_xticks)
-	tticks = _get_ticks(t, tlim, num_tticks)
-	A_xt = A_xt[tticks[0]:tticks[-1], xticks[0]:xticks[-1]]
-	
-
-	im = axs[0].imshow(A_xt.T if not log_scale else np.log10(A_xt.T),\
-					   aspect = 'auto', **imshow_kwargs)
-	
-	axs[0].set_xticks(tticks - tticks[0])
-	axs[0].set_xticklabels(_round(t[tticks], round_t))
-	axs[0].set_yticks(xticks - xticks[0])
-
-	axs[0].set_yticklabels(_round(x[xticks], round_x))
-	if len(axs) == 2:
-		fig.colorbar(im, cax = axs[1])
-	
-	if not isinstance(axis_sum, Iterable):
-		axis_sum = [axis_sum]
-	if not isinstance(sqr_sum, Iterable):
-		sqr_sum = [sqr_sum]
-	assert len(axis_sum) == len(sqr_sum), 'lenght of axis_sum should be equal to lenght of sqr_sum'
-	for i, axis_sum_ in enumerate(axis_sum):
-		if not axis_sum_ is None:
-			s = np.sum(A_xt if not sqr_sum[i] else A_xt ** 2, axis = axis_sum_)
-			s = s if not log_scale else np.log10(s)
-			min_, max_ = np.min(s), np.max(s)
-			s = (s - min_) / (max_ - min_)
+	@staticmethod
+	def from_slices_legacy(calc_directory, field, skip_step = 10):
+		"""
+		loads spatiotemporal dynamics from directory, 
+		where simulation setup (as .param files) and processed slices (as .npy) are stored	
+		"""
+		files = os.listdir(calc_directory)
+		params = ['CELL_WIDTH_SI', 'CELL_HEIGHT_SI',\
+		'CFL_RATIO', 'SQRT3', 'DELTA_T_SI']
+		p = find_params(calc_directory, 'grid', params)
+		for param in params[:-1]:
+			p['DELTA_T_SI'] = p['DELTA_T_SI'].replace(param, str(p[param]))
+		p['DELTA_T_SI'] = skip_step * eval(p['DELTA_T_SI'].replace('SPEED_OF_LIGHT_SI', str(c)))
+		A = np.load(os.path.join(calc_directory, 'yt_maps', 'slices_' + field + '.npy'))
+		return xt_map(A.T, dx = 1e6 * p['CELL_HEIGHT_SI'], dt = 1e15 * p['DELTA_T_SI'],\
+		x_title = '$x, \mu m$', t_title = '$t, fs$')
 		
-			if axis_sum_ == 1:
-				s = A_xt.shape[axis_sum_] * (1 - s * sum_height)
-				axs[0].plot(s, **sum_kwargs)
-				axs[0].set_ylim([0, xticks[-1] - xticks[0]])
-# 				axs[0].axhline(0, c = 'r')
-# 				axs[0].axhline(xticks[-1] - xticks[0])
-			else:
-				s = A_xt.shape[axis_sum_] * s * sum_height	
-				axs[0].plot(s, np.arange(len(s)), **sum_kwargs)
-				axs[0].set_xlim([0, tticks[-1] - tticks[0]])
 
-    
-            
-	if len(axis_sum) == 1 and not axis_sum[0] is None:
-		axs[0].invert_yaxis()
+	@staticmethod
+	def from_probes_h5(path, field, filter_fn = None, default_kw = {},\
+	 shape = None, verbose = True):
+		"""
+		reads spatiotemporal dynamics from single .h5, proccessed by file_utils.probes2h5
 
+		filter_fn - callable: coordinates of probes -> indices of probes to peak, spatial axis 
+		"""
+		with h5py.File(path, 'r') as f:
+			F = np.array(f['data'][field[0]][field[1]])
+			m = h5py.AttributeManager(f['data'])
+			xy = f['data']['xy']
+			dx, dt = m['dx_SI'], m['dt_SI']
+			print(dt)
 
+			if not filter_fn is None:
+				leftover, x_ = filter_fn(xy, **default_kw)
+				if (isinstance(x_, tuple) or isinstance(x_, list)) and isinstance(x_[1], str):
+					x_, xtitle = x_[0], x_[1]
+				else:
+					xtitle = 'x, a.u.'
+				
+				sort_idx = sorted(leftover, key = lambda idx:x_[idx])
+				F = F[:, sort_idx]
+				x_ = x_[sort_idx]
+				F = F.reshape((len(F), len(x_)))
+				F_interp = np.zeros_like(F)
+				x_interp = np.linspace(np.min(x_), np.max(x_), len(x_))
 
-def compress_xt(F, tr_time = 1e-5, tr_space = 1e-5):
-	"""
-	compresses xt map, leaving only part, where time averaged values values > tr_time * max(F)
-	and space averaged > tr_space * max(F)
+				for k in tqdm(range(len(F))) if verbose else range(len(F)):
+					spl = CubicSpline(x_, F[k])
+					F_interp[k] = spl(x_interp)
 
-	Parameters
-	----------
-	F - xt map to compress
-	tr_time - threshold value, to truncate time axis
-	tr_space - threshold value, to truncate space axis
-
-	Returns:
-	----------
-	cropped xt map
-	"""
-	mean_B = np.mean(np.abs(F), axis = 1)
-	start = np.where(mean_B > tr_time * np.max(mean_B))[0][0]
-	F = F[start:]
-	mean_B = np.mean(np.abs(F), axis = 0)
-	nz = np.where(mean_B > tr_space * np.max(mean_B))[0]
-	return F[:, nz[0]: nz[-1]].astype('float32')
+				F = F_interp.copy()
+				dx = x_[1] - x_[0]
 
 
-
-def kw2angle_w(ky, w, A_kw, show_progress = False):
-	"""
-	converts wavevector y-projection frequecny map (A(ky,w)) to
-	angle frequency map A(theta,w) using interpolation: A(theta, w) = A(ky=w/c sin theta, w)
-
-	Parameters
-	----------
-	ky - wavevector projection values (in SI units)
-	w - frequency values (in SI units)
-	A_kw - wavevector y-projection frequecny map
-	show_progress - display progress bar or not
-
-	Returns:
-	----------
-	angle values, frequency values and angle frequency map
-	"""
-	theta = np.linspace(-np.pi/2, np.pi/2, len(ky))
-	sin_theta = np.sin(theta) / c
-	A_angle_w = np.empty_like(A_kw)
-	r = tqdm(range(A_kw.shape[0])) if show_progress else range(A_kw.shape[0])
-	for i in r:
-		spl = CubicSpline(ky, A_kw[i])
- 
-		A_angle_w[i] = spl(w[i] * sin_theta)
-	return theta, w, A_angle_w
+			return xt_map(
+				A = F.T,\
+				dx = dx, dt = 1e15 * dt,\
+				t_title = 't, fs', x_title = xtitle,\
+				t_origin = 0, x_origin = 0 
+			)
 
 
+	@inplacify
+	def xw(self, new_title = None, crop_negative = True):
+		"""
+		computes FFT along temporal axis
+		"""
+		A_xw = F(self.data, axis = 1)
+		if crop_negative:
+			A_xw = A_xw[:, A_xw.shape[1] // 2:]
+		self.dx = 1 / (self.dx * self.data.shape[1])
+		self.data = A_xw
+		self.x_title = self.x_title if new_title is None else new_title
+		self.x_origin = 0 if crop_negative else -self.dx * len(A_xw) // 2  
+		return self
+		
+
+	@inplacify
+	def kt(self, new_title = None, crop_negative = False):
+		"""
+		computes FFT along spatial axis
+		"""
+		A_xw = F(self.data, axis = 0)
+		if crop_negative:
+			A_xw = A_xw[A_xw.shape[0] // 2:]
+		self.dy = 1 / (self.dy * self.data.shape[0])
+		self.data = A_xw
+		self.y_title = self.y_title if new_title is None else new_title
+		self.y_origin = 0 if crop_negative else -len(A_xw) // 2 * self.dy
+		return self
+
+	@inplacify
+	def kw(self, crop_negative_freq = True, crop_negative_k = False):
+		"""
+		computes FFT along both axes
+		"""
+		self.xw(inplace = True, crop_negative = crop_negative_freq)
+		self.kt(inplace = True, crop_negative = crop_negative_k)
+		return self
+
+	@inplacify
+	def angle_frequency(self, w2k, show_progress = False):
+		"""
+		computes angle-frequency map. It is assumed, that spatial axis is in cartesian units
+
+		w2k - term in dispersion relation. e.g. if dw, dk in SI units, then w2k = 1/c
+		  if in normilized to laser frequency and wavevector, then w2k = 1
+		show_progress - if show progress bar
+		"""
+		self.kw(inplace = True, crop_negative_freq = True, crop_negative_k = False)
+		kx = np.linspace(-0.5, 0.5, self.data.shape[0]) * self.data.shape[0] * self.dy
+		w = np.linspace(0, 1, self.data.shape[1]) * (self.data.shape[1]) * self.dx
+		theta = np.linspace(-np.pi / 2, np.pi / 2, len(kx))
+		sin_theta = np.sin(theta) * w2k
+		A_angle_w = np.empty_like(self.data)
+		r = tqdm(range(len(w))) if show_progress else range(len(w))
+		for i in r:
+			spl = CubicSpline(kx, self.data[:, i])
+			A_angle_w[:, i] = spl(w[i] * sin_theta)
+		theta *= 180 / np.pi
+		self.data = A_angle_w
+		self.y_title = r'$\theta^{\circ}$'
+		self.dy = theta[1] - theta[0]
+		self.y_origin = -.5 * self.dy * len(theta)
+		return self
+
+	@inplacify
+	def apply_direction_filter(self, Filter):
+		return super().apply_filter(Filter, axis = (0, 1))
+
+	@inplacify
+	def propagate_cart(self, z):
+		raise NotImplemented
+
+	@inplacify
+	def compensate_curvature(self):
+		"""
+		compensates wavefront curvature by time shift of each line
+
+		Parameters
+		----------
+
+		Returns:
+		----------	
+		"""
+
+		ph_xw = F(self.data, axis = 0)
+		A_w = np.sum(np.abs(ph_xw[self.data.shape[1] // 2:]), axis = 1)
+		ph_xw = np.angle(ph_xw)
+		w0_idx = np.argmax(A_w) 
+		delay = ph_xw[self.data.shape[1] // 2 + w0_idx]
+		delay = np.unwrap(delay)
+	
+		delay -= delay[self.data.shape[0] // 2]
+		delay = delay / (np.argmax(A_w) * 2 * np.pi / self.data.shape[1])
+	
+		A_xt_delayed = np.zeros_like(self.data)
+		for i in range(self.data.shape[1]):
+			A_xt_delayed[:, i] = np.roll(self.data[:, i], int(delay[i]))
+		self.data = A_xt_delayed
+		return self
 
 
+	def show_marginal(self, axs, axis, size = 0.25, post_proc = None, **kw):
+		"""
+		adds sum of data along one of axes to the matplotlib axs 
 
-
-
-
-
+		axis - axis along which to sum (0 - t, 1 - x)
+		"""
+		xlims, ylims = axs.get_xlim(), axs.get_ylim()
+		S = np.sum(self.data, axis = axis)
+		S = S if post_proc is None else post_proc(S)
+		S = (S - np.min(S)) / (np.max(S) - np.min(S))
+		S *= size
+		if axis == 0: #x
+			x = np.linspace(*xlims, self.data.shape[1])
+			y = ylims[0] + S * (ylims[1] - ylims[0])
+		else:
+			x = xlims[0] + S * (xlims[1] - xlims[0])
+			y = np.linspace(*ylims, self.data.shape[0])
+		axs.plot(x, y, **kw)
+		axs.set_xlim(xlims)
+		axs.set_ylim(ylims)
 

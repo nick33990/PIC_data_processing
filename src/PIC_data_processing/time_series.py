@@ -1,9 +1,16 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from collections.abc import Iterable
+
 
 from .math_utils import F, Fi, fft_filter_F, FWHM
 from .plot_utils import _getlims
+from .constants import *
+
+import matplotlib
+matplotlib.use(mpl_backend)
+import matplotlib.pyplot as plt
+from collections.abc import Iterable
+
+__all__ = ['plot_spectra', 'plot_HF_part', 'plot_pulses']
 
 
 def plot_spectra(fig, axs, signal_list, dt,\

@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 
+__all__ = ['two_color', 'three_color', 'with_white', 'add_transparency', '_getlims']
+
 
 def _getlims(lim, step):
 	"""
@@ -11,29 +13,6 @@ def _getlims(lim, step):
 	upper = int(lim[1] / step) + 1 + 1 if not lim[1] is None else -1
 	return slice(lower, upper, 1)
 
-def _round(X, n = 1):
-	"""
-	rounds all values in X to n significant digits,
-	 e.g [0.12e-12, 1.45e-12, 4.56e-12] -> [1.0e-13 1.4e-12 4.6e-12],
-
-	Parameters
-	----------
-	X - array to be rounded
-	n - number of signinficant digits to keep
-	Returns
-	----------
-	rounded array
-	"""
-	r = [-(np.floor(np.log10(np.abs(x)))) + (n - 1) for x in X if x != 0]
-# 	print(r)
-	return np.round(X, int(np.min(r[r != np.inf])))
-
-def _get_ticks(x, lim, num_ticks):
-	lim = [np.min(x) if (lim is None or lim[0] is None) else lim[0],
-			np.max(x) if (lim is None or lim[1] is None) else lim[1]]
-	ticks = np.linspace(lim[0], lim[1], num_ticks)
-	ticks = [np.abs(ticks[i] - x).argmin() for i in range(len(ticks))]
-	return ticks
 
 def two_color(c0, c1, gamma = 1):
 	"""

@@ -27,8 +27,9 @@ def FWHM(Y, level = 1 / 2, return_delta = True):
 
 
 def Fi(I, axis = 0):
-	ii = np.linspace(0, I.shape[0] - 1, I.shape[0])
+	ii = np.linspace(0, I.shape[axis] - 1, I.shape[axis])
 	phase_factor = np.exp(-1j * np.pi * ii)
+
 	if len(I.shape) == 2:
 		phase_factor = phase_factor.reshape((-1, 1) if axis == 0 else (1, -1))
 	ift = np.fft.ifft(phase_factor * I, axis = axis)
@@ -37,6 +38,7 @@ def Fi(I, axis = 0):
 def F(I, axis = 0):
 	ii = np.linspace(0, I.shape[axis] - 1, I.shape[axis])
 	phase_factor = np.exp(-1j * np.pi * ii)
+
 	if len(I.shape) == 2:
 		phase_factor = phase_factor.reshape((-1, 1) if axis == 0 else (1, -1))
 
@@ -156,31 +158,3 @@ def env_conv(s, kernel):
 	env = np.convolve(I / Imax, kernel, mode = 'same')
 	env /= np.sum(kernel)
 	return env
-
-
-def cart2pol_interp(x, y, A):
-	"""
-	transforms array on cartesian grid A(x, y) to polar grid A(r, theta).
-
-	Parameters
-	----------
-	x, y - arrays of coordinates
-	A - array to be transformed
-	
-	Returns
-	----------
-	r, theta - arrays or polar coordinates r = sqrt(x^2 + y^2) and angles (in degrees),
-	A_ra - array in polar coordinates
-	"""
-	Nx, Ny = A.shape
-
-	borders_x = np.min(x), np.max(x)
-	borders_y = np.min(y), np.max(y)
-	interp = RegularGridInterpolator((x, y), A, bounds_error = False, fill_value = 0)
-	kr, theta = np.linspace(0, np.sqrt(x[-1] ** 2 + y[-1] ** 2), len(x)),\
-				np.linspace(0, 2 * np.pi, len(y)) # len(x)
-	kr, theta = np.meshgrid(kr, theta)
-	Kx, Ky = kr * np.sin(theta), kr * np.cos(theta)
-	coords = np.vstack((Kx.flatten(), Ky.flatten())).T
-	theta *= 180 / np.pi
-	return kr[0], theta[:, 0], interp(coords).reshape(Kx.shape)[::-1]

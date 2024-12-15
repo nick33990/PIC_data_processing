@@ -1,13 +1,20 @@
 import os
+import re
 import h5py
 import numpy as np
+from tqdm import tqdm
+import pickle
+from os.path import join
 
 """
 This file oriented to work with output from PIConGPU library
 https://github.com/ComputationalRadiationPhysics/picongpu
 """
 
-def get_grid_steps(m, multiplier = 1e6):
+__all__ = ['get_grid_steps', 'read_positions', 'density_from_fields', 'read_probe_field', 'read_field',\
+'proj', 'load_line', 'probes2h5', 'find_params']
+
+def get_grid_steps(m, multiplier = 1):
 	"""
 	Reads spatial grid steps from h5py.AttributeManager
 
@@ -46,7 +53,7 @@ def read_positions(f, species, two_dim = True):
 	Dy = np.array(f['particles'][species]['positionOffset']['y'])
 
 	if not two_dim:
-		z = np.array(['particles'][species]['position']['z'])
+		z = np.array(f['particles'][species]['position']['z'])
 		Dz=np.array(f['data'][str(time_step)]['particles'][species]['positionOffset']['z'])
 	
 		return (x + Dx), (y + Dy), (z + Dz)
@@ -54,7 +61,7 @@ def read_positions(f, species, two_dim = True):
 		return (x + Dx), (y + Dy)
 
 
-def density_from_fields(f, species = 'e', uc = -1.6e-19):
+def density_from_fields(f, species = 'e', uc = -1.6e-19, dataset = 'fields'):
 
 	"""
 	reads species density if it was written in fields dataset
@@ -69,13 +76,11 @@ def density_from_fields(f, species = 'e', uc = -1.6e-19):
 	----------
 	density in 1 / m^3 (SI units)
 	"""
-	dens = np.array(f['fields'][species + '_all_chargeDensity'])
-	unit_si_dens = h5py.AttributeManager(f['fields'][species + '_all_chargeDensity'])['unitSI']
-	return dens * unit_si_dens / uc 
-
-
-# 2D
-
+	dens = np.array(f[dataset][species + '_all_chargeDensity'])
+	unit_si_dens = h5py.AttributeManager(f[dataset][species + '_all_chargeDensity'])['unitSI']
+	if dataset == 'fields':
+		unit_si_dens /= uc
+	return dens * unit_si_dens 
 
 
 def read_probe_field(f, field, axis, ii, jj, kk = None, species = 'p'):
@@ -94,7 +99,7 @@ def read_probe_field(f, field, axis, ii, jj, kk = None, species = 'p'):
 	----------
 	field in SI units (E/m for electric or Tl for magnetic)
 	"""
-	F_flat = np.array(['particles'][species]['probe' + field][axis])
+	F_flat = np.array(f['particles'][species]['probe' + field][axis])
 	F_unit_si = h5py.AttributeManager(f['particles'][species]['probe' + field][axis])['unitSI']
 
 	two_dim = (kk is None)
@@ -107,17 +112,21 @@ def read_probe_field(f, field, axis, ii, jj, kk = None, species = 'p'):
 		nz = len(np.unique(kk))
 		shape = (nx, ny, nz)
 
-	F = np.zeros(shape, dtype = 'float32')
+	
 	if two_dim:
-		for i in range(len(F_flat)):
-			F[ii[i], jj[i]] = F_flat[i]
+		idx = ii * ny + jj
+		F = np.zeros_like(F_flat)
+		F[idx] = F_flat
+		F = F.reshape(shape)
+
 	else:
+		F = np.zeros(shape, dtype = 'float32')
 		for i in range(len(F_flat)):
 			F[ii[i], jj[i], kk[i]] = F_flat[i]
 	return F * F_unit_si
 
 
-def read_field(f, field, axis):
+def read_field(f, field, axis, dataset = 'fields'):
 	"""
 	reads field from picongpu hdf5 file
 
@@ -131,8 +140,8 @@ def read_field(f, field, axis):
 	----------
 	field in SI units
 	"""
-	F_unit_si = h5py.AttributeManager(f['fields'][field][axis])['unitSI']
-	F = f['fields'][field][axis]
+	F_unit_si = h5py.AttributeManager(f[dataset][field][axis])['unitSI']
+	F = f[dataset][field][axis]
 	return	 F_unit_si * F
 
 
@@ -161,6 +170,107 @@ def load_line(filename, axes, dtype = 'float32'):
 		line = line.split(' ')[:-1]
 		line = [projv(np.array(line) , axis).astype(dtype) for axis in axes]
 		return line
+
+
+def probes2h5(path, dest_path, format_str = "simData_p_\d+.h5", fn2ts = lambda x:int(x.split('_')[-1][:-3]),\
+ idx_min = 0, idx_max = -1, verbose = True, axes_E = ['x', 'y', 'z'], axes_B = ['x', 'y', 'z'], dtype = '<f4'):
+	"""
+	converts directory with probes data to single h5 file with attributes ('dx_SI, dt_SI (period of probes recording)')
+	"""
+	valid_format = re.compile(format_str)
+	files = list(filter(valid_format.match, os.listdir(path)))
+
+	files = sorted(files, key = fn2ts)[idx_min: idx_max]
+	
+	d_idx = fn2ts(files[1]) - fn2ts(files[0])
+	
+	E, B = None, None
+	
+	for i, file in tqdm(enumerate(files), total = len(files)) if verbose else enumerate(files):
+		with h5py.File(join(path, file), 'r') as f:
+			m = h5py.AttributeManager(f['data'][str(fn2ts(file))])
+			f = f['data'][str(fn2ts(file))]['particles']['p']
+			ids = np.array(f['id'])
+
+			x = np.array(f['positionOffset']['x'], dtype = 'uint16')
+			y = np.array(f['positionOffset']['y'], dtype = 'uint16')  
+
+			idx = np.argsort(ids)
+
+			xy = np.vstack((x[idx], y[idx])).T
+
+
+			if i == 0:
+				ids0 = ids.copy()
+ 
+				E = np.zeros((len(files), len(idx), len(axes_E)), dtype = dtype)
+				B = np.zeros((len(files), len(idx), len(axes_B)), dtype = dtype)			 
+				
+				dt_SI = m['unit_time']
+				dx_SI = m['unit_length'] * m['cell_width']
+				
+				m = h5py.AttributeManager(f['probeE']['x'])
+				E_SI = m['unitSI']
+				m = h5py.AttributeManager(f['probeB']['x'])
+				B_SI = m['unitSI']
+
+			E_ds, B_ds = np.array([np.array(f['probeE'][axis]) for axis in axes_E]),\
+						 np.array([np.array(f['probeB'][axis]) for axis in axes_B])
+
+
+			E[i] = E_ds.T[idx]
+			B[i] = B_ds.T[idx]
+	
+	# with open(r"C:\Users\lenovo\OneDrive\Рабочий стол\2\PIC\D_6.67_H_1.45_AOI_25_L_5\save.pkl", 'rb') as f:
+	# 	d = pickle.load(f, encoding = 'latin1')
+
+	# E = d['E']
+	# B = d['B']
+	# xy = d['xy']
+	# dx_SI = d['dx_SI']
+	# dt_SI = d['dt_SI'] * 15
+
+
+	with h5py.File(dest_path, 'w') as f:
+		grp = f.create_group('data')
+		grp.attrs['dx_SI'] = dx_SI
+		grp.attrs['dt_SI'] = dt_SI * d_idx
+		E_grp = grp.create_group('E')
+		B_grp = grp.create_group('B')
+		for i, axis in enumerate(axes_E):
+			E_grp.create_dataset(axis, data = E[:, :, i])
+		for i, axis in enumerate(axes_B):
+			B_grp.create_dataset(axis, data = B[:, :, i])
+		grp.create_dataset('xy', data = xy)
+
+
+
+	# return {'E' : E * E_SI, 'B' : B * B_SI, 'xy' : xy, 'dt_SI' : dt_SI, 'dx_SI' : dx_SI}
+
+
+def find_params(path, file, params):
+	"""
+	Scans specified directory and specified picongpu .param or .cfg file to find simulation params.
+	if param expressed through laser wavelenght, it is evaluated in SI units
+	"""
+	with open(join(path, 'picongpu', 'param', '{}.param'.format(file)), 'r') as f:
+		content = f.read()
+		vals = {}
+		for p in params:
+			match_str = f'{p} = .+;'
+			res = re.search(match_str, content)
+			val_str = content[res.start() + len(rf'{p} = '):res.end() - 1]
+			try:
+				vals[p] = float(val_str)
+			except ValueError:
+				if 'wavelength' in val_str:
+					wavelength = find_params(path, 'grid', ['wavelength'])['wavelength']
+					vals_str = val_str.replace('SI::wavelength', f'{wavelength}').replace('wavelength', f'{wavelength}')
+					vals[p] = eval(vals_str)
+				else:
+					vals[p] = val_str
+
+	return vals
 
 
 def load_xt_map(path, axes, step = 2, dtype = 'float32'):
