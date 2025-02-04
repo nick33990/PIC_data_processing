@@ -173,7 +173,8 @@ def load_line(filename, axes, dtype = 'float32'):
 
 
 def probes2h5(path, dest_path, format_str = "simData_p_\d+.h5", fn2ts = lambda x:int(x.split('_')[-1][:-3]),\
- idx_min = 0, idx_max = -1, verbose = True, axes_E = ['x', 'y', 'z'], axes_B = ['x', 'y', 'z'], dtype = '<f4'):
+ idx_min = 0, idx_max = -1, verbose = True, axes_E = ['x', 'y', 'z'], axes_B = ['x', 'y', 'z'], dtype = '<f4',\
+ species = 'p'):
 	"""
 	converts directory with probes data to single h5 file with attributes ('dx_SI, dt_SI (period of probes recording)')
 	"""
@@ -189,7 +190,7 @@ def probes2h5(path, dest_path, format_str = "simData_p_\d+.h5", fn2ts = lambda x
 	for i, file in tqdm(enumerate(files), total = len(files)) if verbose else enumerate(files):
 		with h5py.File(join(path, file), 'r') as f:
 			m = h5py.AttributeManager(f['data'][str(fn2ts(file))])
-			f = f['data'][str(fn2ts(file))]['particles']['p']
+			f = f['data'][str(fn2ts(file))]['particles'][species]
 			ids = np.array(f['id'])
 
 			x = np.array(f['positionOffset']['x'], dtype = 'uint16')
