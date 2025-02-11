@@ -112,7 +112,7 @@ class xy_map(base_map):
 		"""
 		A_hat = F2(self.data)
 		print(self.dx)
-		new_dx, new_dy = 1 / (self.data.shape[1] * self.dx), 1 / (self.shape[0] * self.dy)
+		new_dx, new_dy = 1 / (self.data.shape[1] * self.dx), 1 / (self.data.shape[0] * self.dy)
 
 		self.x_title = super()._fft_switch_axis(self.x_title)
 		self.y_title = super()._fft_switch_axis(self.y_title)

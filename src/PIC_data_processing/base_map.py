@@ -61,6 +61,33 @@ class base_map:
 		else:
 			return 'k' + title + '^-1'
 	
+	@inplacify
+	def crop_c(self, xc, yc, wx, wy):
+		'''
+		Crops data with center in (xc, yc) and width and height equal to wx and wy
+		all parameters should be specified in same units as self.dx and self.dy
+		'''
+		self.crop_b(xc - .5 * wx, xc + .5 * wx,\
+							yc - .5 * wy, yc + .5 * wy, inplace = True)
+		return self
+		
+	@inplacify
+	def crop_b(self, x0, x1, y0, y1):
+		'''
+		Crops data by boundaries, specified in same units as self.dx and self.dy
+		'''
+		assert x0 < x1, 'x0 should be less than x1'
+		assert y0 < y1, 'y0 should be less than y1'
+		i0, i1 = [int((y - self.y_origin) / self.dy) for y in [y0, y1]]
+		j0, j1 = [int((x - self.x_origin) / self.dx) for x in [x0, x1]]
+		assert (i0 >= 0) and (j0 >= 0) and (i1 < self.data.shape[0]) and (j1 < self.data.shape[1]), 'Invalid position'
+
+		self.data = self.data[self.data.shape[0] - i1:self.data.shape[0] - i0, j0:j1]
+
+		self.x_origin = x0
+		self.y_origin = y0
+		return self
+
 	def show(self, fig = None, axs = None, show_colorbar = False, log_scale = False, **kw):
 		"""
 		draws data on matplotlib axes
