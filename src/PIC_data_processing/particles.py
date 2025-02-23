@@ -93,6 +93,7 @@ class Species:
 
     def filter(self, criterion):
         criterion = np.where(criterion)
+        self.weight = self.weight[criterion]
         if not self.r is None:
             self.r = self.r[criterion]
         if not self.p is None:
