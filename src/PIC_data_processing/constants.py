@@ -1,6 +1,6 @@
 from math import pi
 
-mpl_backend = 'Agg'
+mpl_backend = 'TkAgg'
 
 # Some useful constants in SI units & conversion factors
 c = 299792458
@@ -11,7 +11,16 @@ me = 9.1e-31
 h_ = h / (2 * pi)
 eps0 = 8.85e-12
 mu0 = 1.25e-6
+
+um = 1e-6 # um to m
+fs = 1e-15 # fs to s
+MGs = 1e-2 # TL to MGs
+
 E2I = 0.5 * eps0 * c * 1e-4 # conversion of electric field (in V/m) squared to intensity (in W/cm^2), I = E2I * E ** 2
 B2I = 0.5 / mu0 * c * 1e-4 # conversion of magnetic field (in TL) squared to intensity (in W/cm^2), I = B2I * B ** 2
 w2E = h_ / e # conversion of angular frquency (in rad/s) to photon energy (in eV)
-wl2nc = 1.142e27 # conversion of inverse squared laser wavelenght (in um) to corresponding critial density (1/m^3) nc = wl2nc / wavelenght^2
+wl2nc = 1.142e27 # conversion of inverse squared laser wavelenght (in um) to corresponding critial density [1/m^3] nc = wl2nc / wavelenght^2
+d2r = pi / 180 # degrees to radians
+E2a0 = e / (2 * pi * me * c * c) * um # E * wavelenght conversion to a0 (a0 = E2a0 * E[V/m] * wavelenght[um])
+B2a0 = e / (2 * pi * me * c) * um # B * wavelenght conversion to a0 (a0 = B2a0 * B[TL] * wavelenght[um])
+
