@@ -17,7 +17,8 @@ def CIC(r):
     return res
 
 class Species:
-    def __init__(self, path, species_name, load_r = True, load_p = True, unit_r = 1e6, unit_p = 1 / (me * c)):
+    def __init__(self, path, species_name, load_r = True, load_p = True, load_id = True,\
+     unit_r = 1e6, unit_p = 1 / (me * c)):
         f = h5py.File(path)
         f = f['data']
         f = f[next(iter(f.keys()))]
@@ -32,13 +33,12 @@ class Species:
         self.mass_real = attr_m['value'] * self.mass
 
         self.weight = np.array(f['particles'][species_name]['weighting'])
+        self.id = np.array(f['particles'][species_name]['id']) if load_id else None
         if load_p:
             for k, v in h5py.AttributeManager(f['particles'][species_name]['momentum']['x']).items():
                 self.attr['mom' + '_' + k] = v
             self.p = np.array([
-                np.array(f['particles'][species_name]['momentum']['x']),
-                np.array(f['particles'][species_name]['momentum']['y']),
-                np.array(f['particles'][species_name]['momentum']['z'])
+                np.array(f['particles'][species_name]['momentum'][i]) for i in ['x', 'y', 'z']
             ])
             self.p = self.p.astype('float32') * self.attr['mom_unitSI'] / self.weight * unit_p
         if load_r:
@@ -46,9 +46,8 @@ class Species:
             self.r *= self.dr[:len(self.r)].reshape(-1, 1)
         else:
             self.r = None
-      
 
-    def particles2field(self, dr, shape = 'CIC'):
+    def particles2field(self, dr, shape = 'CIC', field = 1, as_density = True):
         min_r = [np.min(self.r[i]) for i in range(len(self.r))]
         Nx, Ny = [1 + int((np.max(self.r[i]) - min_r[i]) / dr[i]) for i in range(len(self.r))]
 
@@ -57,7 +56,12 @@ class Species:
 
 
         grid = np.zeros(Ny * Nx)
-        grid[pos1D] = self.weight 
+        avg = np.zeros_like(grid)
+
+        for i in range(len(pos1D)):
+            grid[pos1D[i]] += field[i]
+            avg[pos1D[i]] += 1
+        grid /= (avg + 1e-6 * np.max(avg))
         grid = grid.reshape((Ny, Nx))
 
         Nkx, Nky = int(4 * self.dr[0] / dr[0]), int(4 * self.dr[1] / dr[1])
@@ -74,8 +78,26 @@ class Species:
 
         cloud /= np.sum(cloud)
         grid = convolve2d(grid, cloud)
-        return grid / (dr[0] * dr[1] * self.dr[2])
+        if as_density:
+            grid /= (dr[0] * dr[1] * self.dr[2])
+        return grid, min_r
 
+
+    def sort_by_id(self):
+        idx = np.argsort(self.id)
+        self.id = self.id[idx]
+        self.weight = self.weight[idx]
+        self.r[:, ] = self.r[:, idx]
+        self.p[:, ] = self.p[:, idx]
+
+    def remove_ids(self, to_remove):
+        idx = np.arange(len(self.id))
+        to_remove = idx[np.searchsorted(self.id, to_remove, sorter = idx)]
+
+        self.id = np.delete(self.id, to_remove)
+        self.weight = np.delete(self.weight, to_remove)
+        self.r = np.delete(self.r, to_remove, 1)
+        self.p = np.delete(self.p, to_remove, 1)
 
     def energy_eV(self, mc = 1):
         return self.mass_real * c * c / e * (np.sqrt(1 + np.sum((self.p / mc) ** 2, axis = 0)) - 1)

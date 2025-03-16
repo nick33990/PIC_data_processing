@@ -1,9 +1,9 @@
-import copy
+from copy import copy
 import numpy as np
+from scipy.ndimage import rotate
 
 from .math_utils import fft_filter_F, fft2_filter_F
 from .constants import *
-
 
 import matplotlib
 matplotlib.use(mpl_backend)
@@ -19,7 +19,7 @@ def inplacify(method):
 		if inplace:
 			method(self, *a, **k)
 		else:
-			return method(copy.copy(self), *a, **k)
+			return method(copy(self), *a, **k)
 	return wrap
 
 
@@ -35,6 +35,7 @@ class base_map:
 		self.shape = A.shape
 		self.x_title = x_title
 		self.y_title = y_title
+
 
 
 	@inplacify
@@ -121,9 +122,7 @@ class base_map:
 
 	@inplacify
 	def abs_sqr(self):
-		res = self.data.conjugate()
-		np.multiply(self.data, res, out = self.data)
-		self.data = np.real(self.data)
+		self.data = np.real(self.data * self.data.conjugate())
 		return self
 
 
@@ -131,16 +130,37 @@ class base_map:
 		"""
 		rescales axis scale times. Also changes its title
 		"""
+		if not isinstance(axis, Iterable):
+			axis = [axis]
+		if not isinstance(scale, Iterable):
+			scale = [scale]
+		if isinstance(unit, str) or not isinstance(unit, Iterable):
+			unit = [unit]
+		if len(scale) < len(axis):
+			scale = scale * len(axis)
+		if len(unit) < len(axis):
+			unit = unit * len(axis)
+		
+		for i in range(len(axis)): 
+			if axis[i] == 0:
+				self.dx *= scale[i]
+				self.x_title = unit[i] if not unit[i] is None else self.x_title + f'x{round(scale[i], 3)}'
+				self.x_origin *= scale[i]
+			else:
+				self.dy *= scale[i]
+				self.y_title = unit[i] if not unit[i] is None else self.y_title + f'x{round(scale[i], 3)}'
+				self.y_origin *= scale[i]
+
+	def get_axis_range(self, axis):
 		if axis == 0:
-			self.dx *= scale
-			self.x_title = unit if not unit is None else self.x_title + f'x{round(scale, 3)}'
-			self.x_origin *= scale
+			return self.x_origin + np.arange(self.data.shape[1]) * self.dx
 		else:
-			self.dy *= scale
-			self.y_title = unit if not unit is None else self.y_title + f'x{round(scale, 3)}'
-			self.y_origin *= scale
+			return self.y_origin + np.arange(self.data.shape[0]) * self.dy
 
-
+	@inplacify
+	def rotate(self, angle):
+		self.data = rotate(self.data, angle)
+		return self
 
 	def center_grid(self):
 		"""
@@ -148,3 +168,61 @@ class base_map:
 		"""
 		self.x_origin = -.5 * self.data.shape[1] * self.dx
 		self.y_origin = -.5 * self.data.shape[0] * self.dy
+
+
+	######## operators ########
+	@staticmethod
+	def _check_dim(map1, map2):
+		assert map1.dx == map2.dx, 'dx1 != dx2'
+		assert map1.dy == map2.dy, 'dy1 != dy2'
+
+		assert map1.x_origin == map2.x_origin, 'x_origin_1 != x_origin_2'
+		assert map1.y_origin == map2.y_origin, 'y_origin_1 != y_origin_2'
+
+	def _check_type(self, map2):
+		if isinstance(map2, base_map):
+			base_map._check_dim(self, map2)
+			inc = map2.data
+		elif isinstance(map2, np.ndarray) or isinstance(map2, float) or isinstance(map2, int):
+			inc = map2
+		else:
+			raise TypeError("unsupported operand type(s) for +: '{}' and '{}'").format(self.__class__, type(map2))
+		return inc
+
+	def __add__(self, map2):
+		new = copy(self)
+		new.data = self.data + self._check_type(map2)
+		return new
+	def __sub__(self, map2):
+		new = copy(self)
+		new.data = self.data - self._check_type(map2)
+		return new
+	def __mul__(self, map2):
+		new = copy(self)
+		new.data = self.data * self._check_type(map2)
+		return new
+	def __truediv__(self, map2):
+		new = copy(self)
+		new.data = self.data / self._check_type(map2)
+		return new
+	def __pow__(self, map2):
+		new = copy(self)
+		new.data = self.data * self._check_type(map2)
+		return new
+	def __iadd__(self, map2):
+		return self + map2
+	def __isub__(self, map2):
+		return self - map2
+	def __imul__(self, map2):
+		return self * map2
+	def __idiv__(self, map2):
+		return self / map2
+
+	def __getitem__(self, i):
+		return self.data[i]
+	def __setitem__(self, i, val):
+		self.data[i] = val
+	def __getslice__(self, i, j, step):
+		return self.__getitem__(slice(i, j, step))
+	def __setslice__(self, i, j, step, val):
+		return self.__setitem__(slice(i, j, step), val)
