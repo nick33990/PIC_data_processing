@@ -1,0 +1,124 @@
+#!/bin/bash
+
+# performs series of calculations with different chirp of incident field 
+
+output_path="/home/labuser/rundir/old_results"
+proj_path="../grating_tst"
+h5path="/home/labuser/rundir/old_results/multic_1/output-run"
+
+param_DH_um=()
+param_DH_um+=( 3.3 0.0 )
+
+
+A0=( 0.62 )
+
+param_AOI=( 45 ) 
+param_Linv=( 60 ) 
+param_ppc=( 55u ) 
+
+param_chirp=( -7.5 )
+cfg=( 2_slices_600 )
+ts=( 90000..180000..1000 )
+
+for ((i=0 ; i < ${#param_DH_um[@]} ; i+=2 ));
+do	
+    echo ${param_DH_um[$i]}  ${param_DH_um[$i+1]}
+
+    
+    for ((j=0 ; j < ${#param_AOI[@]} ; j++ ));
+    do
+	for ((k=0 ; k < ${#param_Linv[@]} ; k++ ));
+	do
+    for ((ii=0 ; ii < ${#param_chirp[@]} ; ii++ ));
+    do
+	    echo ${param_Linv[$k]}    ${param_AOI[$j]}
+        echo ${param_chirp[$ii]}   ${cfg[$ii]}   ${ts[$ii]}
+	   param=()
+           while read line; do
+	       param+=($line)
+           done < <(python3 define_target.py --AOI ${param_AOI[$j]} --Linv ${param_Linv[$k]} --D_um ${param_DH_um[$i]} --H_um ${param_DH_um[$i+1]} )
+      
+# setting params
+  	    python3 change_params.py -p ${proj_path}/include/picongpu/param/incidentField.param -P chirp=${param_chirp[$ii]}
+
+        python3 change_params.py -p ${proj_path}/include/picongpu/param/density.param -P AOI_deg=${param_AOI[$j]}
+
+        python3 change_params.py -p ${proj_path}/include/picongpu/param/grid.param -P Nx=${param[0]} \
+          Ny=${param[1]} \
+          x_c=${param[2]}*SI::wavelength \
+          y_c=${param[3]}*SI::wavelength
+
+        python3 change_params.py -p ${proj_path}/include/picongpu/param/particle.param -P TYPICAL_PARTICLES_PER_CELL=${param_ppc[$k]}
+
+        sim_cfg_path=${proj_path}/etc/picongpu
+        grid_size=TBG_gridSize=\"${param[0]}_${param[1]}\"
+        echo $sim_cfg_path/${cfg[$ii]}.cfg
+
+        python3 change_params.py -p $sim_cfg_path/${cfg[$ii]}.cfg -P $grid_size
+
+
+# build and run
+	    cd $proj_path
+        pic-build -b "cuda:75" -c "-DALPAKA_CXX_STANDARD=17"
+	    echo ${param_chirp[$ii]}
+
+        rm $h5path/simOutput/slices_E90/*
+        rm $h5path/simOutput/slices_E70/*
+        rm $h5path/simOutput/slices_B90/*
+        rm $h5path/simOutput/slices_B70/*
+
+        mkdir $h5path/simOutput/slices_E90
+        mkdir $h5path/simOutput/slices_E70
+        mkdir $h5path/simOutput/slices_B90
+        mkdir $h5path/simOutput/slices_B70
+
+	    tbg -s bash -c etc/picongpu/${cfg[$ii]}.cfg -t etc/picongpu/bash/mpiexec.tpl $h5path -f
+	    cd ../results
+
+
+# processing results
+     calc_name=chirp_${param_chirp[$ii]}__D_${param_DH_um[$i]}_H_${param_DH_um[$i+1]}_AOI_${param_AOI[$j]}_L_${param_Linv[$k]}
+	 path=$output_path/$calc_name
+	 mkdir $path
+	 h5path_backup=${path}_h5
+	 mkdir $h5path_backup
+    
+     cp -r $h5path/input/include/picongpu $path
+     cp $h5path/simOutput/output $path 
+    
+
+# spatiotemporal dynamics
+	 echo -e "\n\n\nspatiotemporal dynamics . . ."
+     python3 slices2h5.py -p ${h5path}/simOutput/slices_E90/ -d ${path}/temporal_90.h5
+     python3 slices2h5.py -p ${h5path}/simOutput/slices_E70/ -d ${path}/temporal_70.h5     
+
+     python3 process_temporal.py -p ${path}/temporal_90.h5 -d ${path} --field Bz --flim 0_40 --source s_h5
+
+# spatial dynamics
+    echo -e "\n\n\nMultic . . ."
+    python3 plot_overlapped.py -p $h5path/simOutput/openPMD -t ${ts[$ii]} \
+        -d ${path} --Emax 5e11_2e11_2e11 --nmax 1_1_1 --from_probes --probes_name p1_all
+   	python3 make_mp4_with_axes.py -d ${path} -p ${path}/fields_lim
+
+# copying files
+    cp -r $h5path/input/include/picongpu $path
+    cp $h5path/simOutput/output $path
+    cp $h5path/simOutput/e_energyHistogram_all.dat $path 
+    s=$h5path/simOutput/openPMD
+ 
+    for (( jj=40000; jj <= 160000; jj+=4000 ))
+    do
+        echo copying $s/simData_0$jj.h5
+        cp $s/simData_0$jj.h5 ${h5path_backup}
+    done
+    done
+	done
+    done
+
+done
+
+
+
+
+
+

@@ -8,10 +8,20 @@ import matplotlib.pyplot as plt
 from os.path import join
 from collections.abc import Iterable
 from pathlib import Path
+from tqdm import tqdm
+from time import time
+from enum import Enum
 
 from PIC_data_processing.xy_maps import *
 from PIC_data_processing.constants import *
 from PIC_data_processing.plot_utils import *
+
+class FILTER_TYPE(Enum):
+    HHG = 'HHG'
+    THz = 'THz'
+
+    def __str__(self):
+        return self.value
 
 
 def parse_args():
@@ -29,10 +39,13 @@ def parse_args():
     parser.add_argument('--nmax', default = None)
     parser.add_argument('--xlim', default = '-2_2')
     parser.add_argument('--ylim', default = '-2_2')
+    parser.add_argument('--species', default = 'p')
+    parser.add_argument('--filter_type', default = 'HHG', type = FILTER_TYPE, choices = list(FILTER_TYPE))
 
     args = parser.parse_args()
 
     args.t = args2time_steps(args.t)
+
     args.wavelenght = float(args.wavelenght)
     args.fields = args.fields.split('_')
     args.Emax = parse_max(args.Emax)
@@ -52,6 +65,7 @@ def args2time_steps(time_steps):
 		time_steps = range(t_start, t_end, t_per)
 	else:
 		time_steps = [int(time_steps[0])]
+	print(time_steps)
 	return time_steps
 
 def parse_max(val):
@@ -63,72 +77,106 @@ def parse_max(val):
         return [float(val)] * 3
 
 if __name__ == '__main__':
-# palletes definition
     dataset_name = 'fields'
     viridis = add_transparency(plt.cm.viridis, lambda x:np.tanh(10*(2*x-1))  ** 2)
     s1 = add_transparency(plt.cm.seismic, lambda x:np.tanh(10*(2*x-1))  ** 2)
 
     args = parse_args()
 
-    rescale = [1/args.wavelenght, '{}/lambda_L$']
+    filename = os.listdir(args.p)[0]
+    ext = filename.split('.')[-1]
+    filename = '_'.join(filename.split('_')[:-1]) + '_'
+    files = [join(args.p, f'{filename}{t:06d}.{ext}') for t in args.t]
+
 
     k = 2 * np.pi / args.wavelenght
     nc = wl2nc / args.wavelenght ** 2
 
     params_read = {
-        'dataset_name' : dataset_name, 'filename' : args.filename
+        'dataset_name' : dataset_name, 'species' : args.species
     }
 
-    F = xy_map.from_openPMD(args.p, args.t[0], field = args.fields[0], from_probes = args.from_probes, **params_read)
+    F = xy_map.from_openPMD(files[0], field = args.fields[0], from_probes = args.from_probes, **params_read)
 
 
     if args.r is None:
-        ne0 = xy_map.from_openPMD(args.p, 0,\
-            field = 'ne', from_probes = False, **params_read).data / nc
+        if args.filter_type == FILTER_TYPE.HHG:
+            ne0 = xy_map.from_openPMD(files[0],\
+                field = 'ne', from_probes = False, **params_read).data / nc
+        else:
+            ne0 = 0
     else:
         ne0 = np.load(args.r) / nc
 
-    hf_filter = 1 - SG_filter2D(F.shape, F.dx/args.wavelenght, F.dy/args.wavelenght, Rmax = 10)
-    output_path = join(args.d, 'fields_lim')
+    kx, ky = np.linspace(-0.5, 0.5, F.shape[1]) * 2 * pi / F.dx / k,\
+            np.linspace(-0.5, 0.5, F.shape[0]) * 2 * pi / F.dy / k
+    Kx, Ky = np.meshgrid(kx, ky)
+    Dw = 1
+    kmax = 21 / 2
+    if args.filter_type == FILTER_TYPE.HHG:
+        Kr = np.sqrt(Kx ** 2 + Ky ** 2)
+        hf_filter = 1 - np.exp(-(0.5 * (Kr - kmax) / (.5 * (7  + 1.0 * Dw))) ** 6)
+        hf_filter[np.where(Kr > kmax)] = 0
+        hf_filter = 1 - hf_filter
+    elif args.filter_type == FILTER_TYPE.THz:
+        filter_width = 0.5
+        filter_pow = 6
+        hf_filter = np.exp(-((Kx ** 2 + Ky ** 2) / filter_width ** 2) ** filter_pow)
+    else:
+        hf_filter = 1
+
+
+    output_path = join(args.d, 'fields')
 
     os.makedirs(output_path, exist_ok = True)
 
     for field in args.fields:
-        for time_step in args.t:
-            F = xy_map.from_openPMD(args.p, time_step, field = field, from_probes = args.from_probes, **params_read)
-            ne = xy_map.from_openPMD(args.p, time_step, field = 'ne', from_probes = False, **params_read)
-            if ne0.shape != ne.shape:
+        for i, time_step in tqdm(enumerate(args.t)):
+            F = xy_map.from_openPMD(files[i], field = field, from_probes = args.from_probes, **params_read)
+            ne = xy_map.from_openPMD(files[i], field = 'ne', from_probes = False, **params_read)
+
+
+            if hasattr(ne0, 'shape') and ne0.shape != ne.shape:
                 print(f'!!!! ne at time step {time_step} shape ({ne.shape}) != ne0 shape ({ne0.shape})')
                 sx, sy = ne0.shape[1] // ne.shape[1], ne0.shape[0] // ne.shape[0]
                 ne0 = ne0[::sx, ::sy]
-            ne.data = ne.data / nc - ne0
+            ne = ne / nc - ne0
             F.center_grid()
             ne.center_grid()
-            F.rescale_axis(0, 1/args.wavelenght, '$x/\lambda_L$')
-            F.rescale_axis(1, 1/args.wavelenght, '$y/\lambda_L$')
-            ne.rescale_axis(0, 1/args.wavelenght, '$x/\lambda_L$')
-            ne.rescale_axis(1, 1/args.wavelenght, '$y/\lambda_L$')
+            F.rescale_axis([0, 1], 1/args.wavelenght, ['$x/\lambda_L$', '$y/\lambda_L$'])
+            ne.rescale_axis([0, 1], 1/args.wavelenght, ['$x/\lambda_L$', '$y/\lambda_L$'])
 
             for i, mode in enumerate(args.modes):
                 Fmin, Fmax = (None, None) if args.Emax[i] is None else (-args.Emax[i], args.Emax[i])
                 nmin, nmax = (None, None) if args.nmax[i] is None else (-args.nmax[i], args.nmax[i])
-                
-                if mode != '1' or (mode == '2' and not '1' in modes):
+
+                if mode == '1' or (mode == '2' and not '1' in args.modes):
                     F.apply_filter(hf_filter, inplace = True)
+                    absorber = 64
+                    F.data[:absorber] = 0
+                    F.data[-absorber:] = 0
+                    F.data[:, :absorber] = 0
+                    F.data[:, -absorber:] = 0
+
+
                 if 'B' in field and not Fmin is None:
                     Fmin, Fmax = Fmin / c, Fmax / c
 
-                fig, axs = plt.subplots(1, 3, figsize = (9, 5),\
-                 gridspec_kw = {'width_ratios':[1, .05, .05]}, dpi = 200)
+                fig, axs = plt.subplots(1, 1, figsize = (10, 5), dpi = 400)
+
+                axs = [axs]
+
+ 
                 F.show_overlaped(ne, fig, axs, kw1 = {'cmap':s1, 'vmin':Fmin, 'vmax':Fmax},\
                  kw2 = {'cmap':viridis, 'vmin' : nmin, 'vmax' : nmax})
+
                 axs[0].set_aspect('equal')
-                
 
                 if mode == '2':
                     axs[0].set_xlim(args.xlim)
                     axs[0].set_ylim(args.ylim)
                 
-                plt.savefig(join(output_path, f'{field}_{mode}_{time_step}.png'), bbox_inches='tight')
+                plt.savefig(join(output_path, f'{field}_{mode}_{time_step}.png'))#, bbox_inches='tight')
                 plt.cla()
                 plt.close(fig)
+
