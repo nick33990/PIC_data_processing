@@ -10,13 +10,13 @@ For examples see scripts folder.
 ### Brief modules description
 * **file_utils.py**:
 Contains functions that read data from output files of PIConGPU framework. From h5 file in openPMD format, and from slice printer plugin.
+* **xt_maps.py**:
+Class ```xt_map``` to work with spatiotemporal dynamics like $E(x,t)$ or $E(x,\omega)$ etc and perform some transforms.
+* **xy_maps.py**:
+Contains class ```xy_map``` to process and plot fields distribution.
 * **time_series.py**:
 Contains functions to plot spectra, high-frequency parts of signals and plotting isolated pulses 
-* **xt_maps.py**:
-Functions to plot arrays like $E(x,t)$ or $E(x,\omega)$ etc and perform some transforms.
 
-* **xy_maps.py**:
-Functions to plot 2D arrays on regular grid.
 
 Example of loading $B_z(x,y)$ field projection and application of spatial filter:
 ```
