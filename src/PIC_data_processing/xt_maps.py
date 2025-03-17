@@ -63,7 +63,7 @@ class xt_map(base_map):
 
 
     @staticmethod
-    def from_slices_h5(path, field, skip = skip):
+    def from_slices_h5(path, field, skip = 1):
         with h5py.File(path, 'r') as f:
             F = np.array(f['data'][field[0]][field[1]])[0].T
             m = h5py.AttributeManager(f['data'])

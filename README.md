@@ -10,30 +10,31 @@ For examples see scripts folder.
 ### Brief modules description
 * **file_utils.py**:
 Contains functions that read data from output files of PIConGPU framework. From h5 file in openPMD format, and from slice printer plugin.
-* **time_series.py**:
-Contains functions to plot spectra, high-frequency parts of signals and plotting isolated pulses 
 * **xt_maps.py**:
-Functions to plot arrays like $E(x,t)$ or $E(x,\omega)$ etc and perform some transforms.
-
+Class ```xt_map``` to work with spatiotemporal dynamics like $E(x,t)$ or $E(x,\omega)$ etc and perform some transforms.
 * **xy_maps.py**:
-Functions to plot 2D arrays on regular grid.
-
+Contains class ```xy_map``` to process and plot fields distribution.
 Example of loading $B_z(x,y)$ field projection and application of spatial filter:
 ```
 import matplotlib.pyplot as plt
 from PIC_data_processing.xy_maps import xy_map, SG_filter2D
 
-F = xy_map.from_openPMD(path/to/data, 40000, 'Bz', from_probes = True)
+F = xy_map.from_openPMD(path/to/data, 'Bz', from_probes = True)
 hf_filter = 1 - SG_filter2D(F.shape, F.dx, F.dy, Rmax = 5)# um^-1
 F.apply_filter(hf_filter, inplace = True)
 F.show(cmap = 'seismic', vmin = -3000, vmax = 3000)
 ```
+* **particles.py**
+Class ```Species``` to analyze macroparticles distribution and motion
+* **time_series.py**:
+Contains functions to plot spectra, high-frequency parts of signals and plotting isolated pulses 
+* **plot_utils.py**:
+Contains some auxilary functions to plot data, like definitions of colormaps with transparency
 * **constants.py**:
 Definition of useful constants.
 * **math_utils.py**
 Contains function to process data: performing fft, fft-filtering of signals, retrieving its envelope and tranforming 2D array from cartesian units to polar
-* **plot_utils.py**:
-Contains some auxilary functions to plot data
+
 ### Scripts description
 * **plot_overlap_maps**: takes directorie, that contains output of PIConGPU calculations in form of .h5 data and plots high-frequency part of $B_z$ field projection and electronic density for each .h5-file in each directory. usage: ```python plot_overlapped.py -p path/to/data -t 30000..60000..3000 --fields Ey_Bz```
 <p align="center">
