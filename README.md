@@ -36,12 +36,12 @@ Definition of useful constants.
 Contains function to process data: performing fft, fft-filtering of signals, retrieving its envelope and tranforming 2D array from cartesian units to polar
 
 ### Scripts description
-* **plot_overlap_maps**: takes directorie, that contains output of PIConGPU calculations in form of .h5 data and plots high-frequency part of $B_z$ field projection and electronic density for each .h5-file in each directory. usage: ```python plot_overlapped.py -p path/to/data -t 30000..60000..3000 --fields Ey_Bz```
+* **plot_overlapped**: takes directory, that contains output of PIConGPU calculations in form of .h5 data and plots high-frequency part of $B_z$ field projection and electronic density for each .h5-file in each directory. usage: ```python plot_overlapped.py -p path/to/data -t 30000..60000..3000 --fields Ey_Bz```
 <p align="center">
 <img src="https://github.com/user-attachments/assets/2be0b89c-505a-4253-805d-d6e84fa2f02d" width="400" />
 </p>
-<p align="center">ROM-harmonic generation, plotted by this scripy (red-$B_z$ field projection, dark blue-electronic density </p>
+<p align="center">ROM-harmonic generation, plotted by this script (red-Bz field projection, dark blue-electronic density </p>
 
-
+* **DC_component**: Computes quasistatic component of selected field, by averaging it over laser cycle. e.g. ```python3 DC_component.py -p path/to/data -t 10000..20000..100 --field Bz```
 
 * **process_temporal**: processes spatiotemporal dynamics. e.g.```python process_temporal``` -p path/to/data --to_plot xw_hf``` will plot spectrum for all positions of field observere and high-frequency part of signal.
