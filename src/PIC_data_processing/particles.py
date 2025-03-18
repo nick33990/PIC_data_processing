@@ -87,8 +87,10 @@ class Species:
         idx = np.argsort(self.id)
         self.id = self.id[idx]
         self.weight = self.weight[idx]
-        self.r[:, ] = self.r[:, idx]
-        self.p[:, ] = self.p[:, idx]
+        if not self.r is None:
+            self.r[:, ] = self.r[:, idx]
+        if not self.p is None:
+            self.p[:, ] = self.p[:, idx]
 
     def remove_ids(self, to_remove):
         idx = np.arange(len(self.id))
@@ -96,8 +98,10 @@ class Species:
 
         self.id = np.delete(self.id, to_remove)
         self.weight = np.delete(self.weight, to_remove)
-        self.r = np.delete(self.r, to_remove, 1)
-        self.p = np.delete(self.p, to_remove, 1)
+        if not self.r is None:
+            self.r = np.delete(self.r, to_remove, 1)
+        if not self.p is None:
+            self.p = np.delete(self.p, to_remove, 1)
 
     def energy_eV(self, mc = 1):
         return self.mass_real * c * c / e * (np.sqrt(1 + np.sum((self.p / mc) ** 2, axis = 0)) - 1)
@@ -117,9 +121,11 @@ class Species:
         criterion = np.where(criterion)
         self.weight = self.weight[criterion]
         if not self.r is None:
-            self.r = self.r[criterion]
+            self.r = self.r[:, criterion]
         if not self.p is None:
-            self.p = self.p[criterion]
+            self.p = self.p[:, criterion]
+        if not self.id is None:
+            self.id = self.id[criterion]
 
     def show(self, fig = None, axs = None, skip = 1, **kw):
         if axs is None:
