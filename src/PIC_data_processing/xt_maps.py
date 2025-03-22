@@ -102,7 +102,6 @@ class xt_map(base_map):
             m = h5py.AttributeManager(f['data'])
             xy = f['data']['xy']
             dx, dt = m['dx_SI'], m['dt_SI']
-            print(dt)
 
             if not filter_fn is None:
                 leftover, x_ = filter_fn(xy, **default_kw)
@@ -123,7 +122,7 @@ class xt_map(base_map):
                     F_interp[k] = spl(x_interp)
 
                 F = F_interp.copy()
-                dx = x_[1] - x_[0]
+                dx = x_interp[1] - x_interp[0]
 
 
             return xt_map(
