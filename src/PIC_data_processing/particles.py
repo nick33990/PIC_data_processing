@@ -17,35 +17,50 @@ def CIC(r):
     return res
 
 class Species:
-    def __init__(self, path, species_name, load_r = True, load_p = True, load_id = True,\
-     unit_r = 1e6, unit_p = 1 / (me * c)):
+    def __init__(self, weight = None, r = None, p = None, ids = None, dr = None, mass = 1, attr = None):
+        self.weight = weight
+        self.r = r
+        self.p = p
+        self.id = ids
+        self.dr = dr
+        self.mass = mass
+        self.attr = attr
+
+    @staticmethod
+    def from_openPMD(path, species_name, load_r = True, load_p = True, load_id = True,\
+    unit_r = 1e6, unit_p = 1 / (me * c)):
         f = h5py.File(path)
         f = f['data']
         f = f[next(iter(f.keys()))]
-        self.attr = dict(h5py.AttributeManager(f))
+        attr = dict(h5py.AttributeManager(f))
 
 
         attr_m = h5py.AttributeManager(f['particles'][species_name]['mass'])
 
-        self.dr = np.array([self.attr['cell_' + x] for x in ['width', 'height', 'depth']])
-        self.dr *= self.attr['unit_length'] * unit_r
-        self.mass = attr_m['unitSI']
-        self.mass_real = attr_m['value'] * self.mass
+        dr = np.array([attr['cell_' + x] for x in ['width', 'height', 'depth']])
+        dr *= attr['unit_length'] / unit_r
+        mass = attr_m['unitSI']
+        mass = attr_m['value'] * mass
 
-        self.weight = np.array(f['particles'][species_name]['weighting'])
-        self.id = np.array(f['particles'][species_name]['id']) if load_id else None
+        weight = np.array(f['particles'][species_name]['weighting'])
+        ids = np.array(f['particles'][species_name]['id']) if load_id else None
         if load_p:
             for k, v in h5py.AttributeManager(f['particles'][species_name]['momentum']['x']).items():
-                self.attr['mom' + '_' + k] = v
-            self.p = np.array([
+                attr['mom' + '_' + k] = v
+            p = np.array([
                 np.array(f['particles'][species_name]['momentum'][i]) for i in ['x', 'y', 'z']
             ])
-            self.p = self.p.astype('float32') * self.attr['mom_unitSI'] / self.weight * unit_p
-        if load_r:
-            self.r = np.array(read_positions(f, species_name)).astype('float32')
-            self.r *= self.dr[:len(self.r)].reshape(-1, 1)
+            p = p.astype('float32') * attr['mom_unitSI'] / weight * unit_p
         else:
-            self.r = None
+            p = None
+            
+        if load_r:
+            r = np.array(read_positions(f, species_name)).astype('float32')
+            r *= dr[:len(r)].reshape(-1, 1)
+        else:
+            r = None
+
+        return Species(weight, r, p, ids, dr, mass, attr)
 
     def particles2field(self, dr, shape = 'CIC', field = 1, as_density = True):
         min_r = [np.min(self.r[i]) for i in range(len(self.r))]
@@ -56,12 +71,9 @@ class Species:
 
 
         grid = np.zeros(Ny * Nx)
-        avg = np.zeros_like(grid)
-
+        field *= self.weight
         for i in range(len(pos1D)):
             grid[pos1D[i]] += field[i]
-            avg[pos1D[i]] += 1
-        grid /= (avg + 1e-6 * np.max(avg))
         grid = grid.reshape((Ny, Nx))
 
         Nkx, Nky = int(4 * self.dr[0] / dr[0]), int(4 * self.dr[1] / dr[1])
@@ -80,7 +92,12 @@ class Species:
         grid = convolve2d(grid, cloud)
         if as_density:
             grid /= (dr[0] * dr[1] * self.dr[2])
-        return grid, min_r
+
+        extent = [min_r[0],\
+                  min_r[0] + grid.shape[1] * self.dr[0],\
+                  min_r[1],
+                  min_r[1] + grid.shape[0] * self.dr[1]]
+        return grid, extent
 
 
     def sort_by_id(self):
@@ -104,7 +121,7 @@ class Species:
             self.p = np.delete(self.p, to_remove, 1)
 
     def energy_eV(self, mc = 1):
-        return self.mass_real * c * c / e * (np.sqrt(1 + np.sum((self.p / mc) ** 2, axis = 0)) - 1)
+        return self.mass * c * c / e * (np.sqrt(1 + np.sum((self.p / mc) ** 2, axis = 0)) - 1)
 
 
     def rotate(self, angle):
@@ -113,17 +130,17 @@ class Species:
                                     -self.r[0] * np.sin(angle) + self.r[1] * np.cos(angle)
 
         if not self.p is None:
-            self.p[0], self.p[1] = self.p[0] * np.cos(angle) - self.p[1] * np.sin(angle),\
-                                    self.p[0] * np.sin(angle) + self.p[1] * np.cos(angle)
+            self.p[0], self.p[1] = self.p[0] * np.cos(angle) + self.p[1] * np.sin(angle),\
+                                    -self.p[0] * np.sin(angle) + self.p[1] * np.cos(angle)
 
 
     def filter(self, criterion):
         criterion = np.where(criterion)
         self.weight = self.weight[criterion]
         if not self.r is None:
-            self.r = self.r[:, criterion]
+            self.r = self.r[:, criterion].reshape(-1, len(self.weight))
         if not self.p is None:
-            self.p = self.p[:, criterion]
+            self.p = self.p[:, criterion].reshape(-1, len(self.weight))
         if not self.id is None:
             self.id = self.id[criterion]
 
